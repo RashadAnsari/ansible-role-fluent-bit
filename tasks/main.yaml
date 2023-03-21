@@ -1,0 +1,69 @@
+- name: Check fluent-bit existance
+  stat:
+    path: /opt/td-agent-bit/bin/td-agent-bit
+  register: fluent_bit_bin
+
+- name: Add fluent-bit apt-key
+  apt_key:
+    url: https://packages.fluentbit.io/fluentbit.key
+    state: present
+  when: not fluent_bit_bin.stat.exists
+
+- name: Add fluent-bit repository (Ubuntu 16.04)
+  apt_repository:
+    repo: 'deb https://packages.fluentbit.io/ubuntu/xenial xenial main'
+    state: present
+    filename: td-agent-bit
+    update_cache: true
+  when: ansible_distribution_major_version == '16' and not fluent_bit_bin.stat.exists
+
+- name: Add fluent-bit repository (Ubuntu 18.04)
+  apt_repository:
+    repo: 'deb https://packages.fluentbit.io/ubuntu/bionic bionic main'
+    state: present
+    filename: td-agent-bit
+    update_cache: true
+  when: ansible_distribution_major_version == '18' and not fluent_bit_bin.stat.exists
+
+- name: Add fluent-bit repository (Ubuntu 20.04)
+  apt_repository:
+    repo: 'deb https://packages.fluentbit.io/ubuntu/focal focal main'
+    state: present
+    filename: td-agent-bit
+    update_cache: true
+  when: ansible_distribution_major_version == '20' and not fluent_bit_bin.stat.exists
+
+- name: Install fluent-bit package
+  package:
+    name: td-agent-bit
+    state: present
+    update_cache: true
+  when: not fluent_bit_bin.stat.exists
+  notify: restart td-agent-bit
+
+- name: Create fluent-bit configs directory
+  file:
+    path: /etc/td-agent-bit/conf.d
+    state: directory
+  notify: restart td-agent-bit
+
+- name: Configure fluent-bit main configuration file
+  template:
+    src: td-agent-bit.conf.j2
+    dest: /etc/td-agent-bit/td-agent-bit.conf
+    mode: 0644
+  notify: restart td-agent-bit
+
+- name: Create fluent-bit custom configuration files
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/td-agent-bit/conf.d/{{ item.split('/')[-1] }}"
+    mode: 0644
+  with_items: "{{ fluentbit_custom_conf }}"
+  notify: restart td-agent-bit
+
+- name: Ensure td-agent-bit service is enabled
+  service:
+    name: td-agent-bit
+    enabled: true
+    use: service
